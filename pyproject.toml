@@ -1,12 +1,21 @@
 [project]
 name = "fastmirror"
-version = "0.1.0"
-description = "Add your description here"
+version = "1.0.0"
+description = "一个基于 FastAPI 的反代框架,支持反代模式和本地缓存模式"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "beautifulsoup4>=4.14.2",
     "fastapi[standard]>=0.121.1",
+    "httpx>=0.28.1",
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "python-dotenv>=1.0.0",
+    "requests>=2.32.5",
 ]
+
+[project.scripts]
+fastmirror = "main:main"
 
 [[tool.uv.index]]
 url = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple"
