@@ -27,7 +27,7 @@ class ProxyHandler:
         self.target_url = target_url.rstrip("/")
         self.cache_manager = cache_manager
         self.client = httpx.AsyncClient(
-            timeout=app_config.request_timeout, follow_redirects=True
+            timeout=app_config.request_timeout, follow_redirects=False
         )
 
     async def handle_request(self, request: Request, path: str) -> Response:
@@ -74,10 +74,33 @@ class ProxyHandler:
             logger.debug(f"Response content-type: {content_type}")
             logger.debug(f"Response content length: {len(content)}")
 
+            # 处理重定向 Location header
+            if "location" in response_headers:
+                original_location = response_headers["location"]
+                # 如果 Location 是绝对路径或完整URL，需要转换
+                if original_location.startswith(self.target_url):
+                    # 完整URL，去掉目标服务器部分，保留路径
+                    new_location = original_location[len(self.target_url) :]
+                    response_headers["location"] = new_location
+                    logger.info(
+                        f"Rewriting Location header: {original_location} -> {new_location}"
+                    )
+                elif original_location.startswith(
+                    "http://"
+                ) or original_location.startswith("https://"):
+                    # 其他域名的完整URL，保持不变
+                    logger.info(
+                        f"Location header points to external URL: {original_location}"
+                    )
+                else:
+                    # 相对路径，保持不变
+                    logger.info(f"Location header is relative: {original_location}")
+
             # 清理响应头,移除可能导致问题的 headers
             headers_to_remove = [
                 "content-length",  # 内容长度会自动计算
                 "transfer-encoding",  # 避免分块传输问题
+                "content-encoding",  # httpx已自动解压,需移除此header避免浏览器二次解压
             ]
             for header in headers_to_remove:
                 response_headers.pop(header, None)

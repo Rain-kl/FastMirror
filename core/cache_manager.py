@@ -99,20 +99,27 @@ class CacheManager:
         # 确保父目录存在
         cache_path.parent.mkdir(parents=True, exist_ok=True)
 
+        # 清理headers,移除可能导致问题的header
+        # httpx已自动解压,移除content-encoding避免浏览器二次解压
+        cleaned_headers = dict(headers or {})
+        headers_to_remove = ["content-encoding", "content-length", "transfer-encoding"]
+        for header in headers_to_remove:
+            cleaned_headers.pop(header, None)
+
         if method.upper() == "GET":
             # GET 请求直接保存内容
             cache_path.write_bytes(content)
 
             # 保存元数据 (headers 和 status_code)
             meta_path = cache_path.with_suffix(cache_path.suffix + ".meta")
-            meta_data = {"status_code": status_code, "headers": headers or {}}
+            meta_data = {"status_code": status_code, "headers": cleaned_headers}
             meta_path.write_text(json.dumps(meta_data, indent=2, ensure_ascii=False))
 
         elif method.upper() == "POST":
             # POST 请求保存为 JSON
             data = {
                 "status_code": status_code,
-                "headers": headers or {},
+                "headers": cleaned_headers,
                 "content": content.decode("utf-8", errors="ignore"),
             }
             cache_path.write_text(json.dumps(data, indent=2, ensure_ascii=False))
