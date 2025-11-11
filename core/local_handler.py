@@ -2,13 +2,13 @@
 本地模式核心功能模块
 """
 
-from fastapi import Request, Response
-from typing import Optional
 import logging
 import mimetypes
+from typing import Optional
 
-from cache_manager import CacheManager
-from config import app_config
+from fastapi import Request, Response
+
+from .cache_manager import CacheManager
 
 logger = logging.getLogger(__name__)
 

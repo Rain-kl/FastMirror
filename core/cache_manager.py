@@ -4,11 +4,9 @@
 """
 
 import json
-import os
 from pathlib import Path
 from typing import Optional, Dict, Any
 from urllib.parse import urlparse, unquote
-import hashlib
 
 
 class CacheManager:

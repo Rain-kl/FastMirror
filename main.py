@@ -8,10 +8,11 @@ import sys
 from fastapi import FastAPI, Request
 from contextlib import asynccontextmanager
 
-from config import app_config, RunMode, Config
-from cache_manager import CacheManager
-from proxy_handler import ProxyHandler
-from local_handler import LocalHandler
+from config import app_config, RunMode
+from core.cache_manager import CacheManager
+from custom.custom_routes import custom_router
+from core.proxy_handler import ProxyHandler
+from core.local_handler import LocalHandler
 
 # 配置日志
 logging.basicConfig(
@@ -69,6 +70,7 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+app.include_router(custom_router)
 
 
 @app.api_route(
@@ -85,6 +87,7 @@ async def catch_all(request: Request, path: str = ""):
         return await proxy_handler.handle_request(request, path)
     elif app_config.mode == RunMode.LOCAL:
         return await local_handler.handle_request(request, path)
+    return None
 
 
 def main():
@@ -135,15 +138,6 @@ def main():
     )
 
     args = parser.parse_args()
-
-    # 如果指定了自定义 .env 文件,重新加载配置
-    if args.env_file != ".env":
-        from pathlib import Path
-
-        if Path(args.env_file).exists():
-            global app_config
-            app_config = Config(_env_file=args.env_file)
-            logger.info(f"从 {args.env_file} 加载配置")
 
     # 命令行参数覆盖配置文件
     if args.mode:
