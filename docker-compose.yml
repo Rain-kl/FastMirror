@@ -1,0 +1,16 @@
+version: "3"
+
+services:
+  fastmirror:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fastmirror
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./cache:/app/cache
+      - ./.env:/app/.env:ro
+    command:
+      [ "uv","run","main.py" ]
+    restart: unless-stopped
