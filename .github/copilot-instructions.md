@@ -4,9 +4,9 @@
 
 FastMirror 是一个 基于 FastAPI 的反向代理框架，具有双运行模式和智能缓存能力。它像一个“中间人”，既可以代理请求并缓存响应，也可以在离线环境下完全从本地缓存提供服务。
 
-### Core Architecture: Two-Mode System
+### Core Architecture: Three-Mode System
 
-核心架构：两种模式
+核心架构：三种模式
 
 代理模式 (--mode proxy)：
 • 通过 ProxyHandler 将请求转发到目标服务器
@@ -20,6 +20,12 @@ FastMirror 是一个 基于 FastAPI 的反向代理框架，具有双运行模�
 • --target 可选（仅用于生成缓存路径）
 • 入口：main.py → LocalHandler.handle_request()
 
+半代理模式 (--mode hybrid)：
+• 通过 HybridHandler 实现智能缓存策略
+• 优先从本地缓存读取，不存在时转发到目标服务器并缓存
+• 必须指定 --target
+• 入口：main.py → HybridHandler.handle_request() → LocalHandler 或 ProxyHandler
+
 ### Component Responsibilities
 
 ```
@@ -29,6 +35,7 @@ core/
   cache_manager.py   # 缓存读写与路径生成逻辑
   proxy_handler.py   # 远程转发与响应缓存
   local_handler.py   # 从缓存读取与 MIME 类型处理
+  hybrid_handler.py  # 半代理模式：优先缓存，缺失时代理
 custom/
   custom_routes.py   # 自定义路由（本地模式下优先级最高）
 ```
@@ -65,6 +72,9 @@ uv run main.py --mode proxy --target http://example.com --port 8000
 
 # 本地模式（离线服务）
 uv run main.py --mode local --target http://example.com --port 8000
+
+# 半代理模式（智能缓存）
+uv run main.py --mode hybrid --target http://example.com --port 8000
 
 # 使用脚本快速启动
 bash start.sh

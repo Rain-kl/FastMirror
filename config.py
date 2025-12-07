@@ -12,6 +12,7 @@ class RunMode(str, Enum):
 
     PROXY = "proxy"  # 反代模式
     LOCAL = "local"  # 本地模式
+    HYBRID = "hybrid"  # 半代理模式（优先本地，不存在则代理）
 
 
 class Config(BaseSettings):
