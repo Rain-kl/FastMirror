@@ -114,6 +114,7 @@ class ProxyHandler:
                         content=content,
                         headers=response_headers,
                         status_code=status_code,
+                        body=body if method.upper() == "POST" else None,
                     )
                     logger.info(f"Response cached for: {target_full_url}")
                 except Exception as e:

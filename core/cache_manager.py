@@ -3,10 +3,13 @@
 负责处理请求缓存的读写操作
 """
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Optional, Dict, Any
 from urllib.parse import urlparse, unquote
+
+from utils import EncodingUtil
 
 
 class CacheManager:
@@ -18,13 +21,16 @@ class CacheManager:
         # 确保缓存目录存在
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
-    def _get_cache_path(self, url: str, method: str = "GET") -> Path:
+    def _get_cache_path(
+            self, url: str, method: str = "GET", body: Optional[bytes] = None
+    ) -> Path:
         """
         根据 URL 和请求方法生成缓存文件路径
 
         Args:
             url: 请求的完整 URL
             method: HTTP 方法 (GET 或 POST)
+            body: 请求体 (POST 请求需要)
 
         Returns:
             缓存文件的路径
@@ -55,17 +61,18 @@ class CacheManager:
             return cache_path
 
         elif method.upper() == "POST":
-            # POST 请求: ./cache/{domain}/post/path/to/endpoint.json
+            # POST 请求: ./cache/{domain}/post/path/to/endpoint/{md5(body)}
             base_dir = self.cache_dir / domain / "post"
 
+            # 计算请求体的 MD5 哈希值
+            body_hash = hashlib.md5(body or b"").hexdigest()
+
             if not path:
-                cache_path = base_dir / "index.json"
+                # 根路径: ./cache/{domain}/post/root/{md5}
+                cache_path = base_dir / "root" / f"{body_hash}.json"
             else:
-                # 确保以 .json 结尾
-                if not path.endswith(".json"):
-                    cache_path = base_dir / f"{path}.json"
-                else:
-                    cache_path = base_dir / path
+                # 带路径: ./cache/{domain}/post/path/to/endpoint/{md5}
+                cache_path = base_dir / path / f"{body_hash}.json"
 
             return cache_path
 
@@ -73,12 +80,13 @@ class CacheManager:
             raise ValueError(f"Unsupported HTTP method: {method}")
 
     def save_response(
-        self,
-        url: str,
-        method: str,
-        content: bytes,
-        headers: Optional[Dict[str, str]] = None,
-        status_code: int = 200,
+            self,
+            url: str,
+            method: str,
+            content: bytes,
+            headers: Optional[Dict[str, str]] = None,
+            status_code: int = 200,
+            body: Optional[bytes] = None,
     ) -> None:
         """
         保存响应到缓存
@@ -89,8 +97,9 @@ class CacheManager:
             content: 响应内容
             headers: 响应头
             status_code: HTTP 状态码
+            body: 请求体 (POST 请求需要)
         """
-        cache_path = self._get_cache_path(url, method)
+        cache_path = self._get_cache_path(url, method, body)
 
         # 确保父目录存在
         cache_path.parent.mkdir(parents=True, exist_ok=True)
@@ -112,21 +121,25 @@ class CacheManager:
             meta_path.write_text(json.dumps(meta_data, indent=2, ensure_ascii=False))
 
         elif method.upper() == "POST":
-            # POST 请求保存为 JSON
+            # POST 请求保存为 JSON (无扩展名)
             data = {
                 "status_code": status_code,
                 "headers": cleaned_headers,
-                "content": content.decode("utf-8", errors="ignore"),
+                "content": EncodingUtil.detect_and_decode(content),
+                "request_body": EncodingUtil.detect_and_decode(body) if body else "",
             }
             cache_path.write_text(json.dumps(data, indent=2, ensure_ascii=False))
 
-    def get_response(self, url: str, method: str = "GET") -> Optional[Dict[str, Any]]:
+    def get_response(
+            self, url: str, method: str = "GET", body: Optional[bytes] = None
+    ) -> Optional[Dict[str, Any]]:
         """
         从缓存读取响应
 
         Args:
             url: 请求的完整 URL
             method: HTTP 方法
+            body: 请求体 (POST 请求需要)
 
         Returns:
             包含响应数据的字典,如果缓存不存在则返回 None
@@ -136,7 +149,7 @@ class CacheManager:
                 "status_code": int
             }
         """
-        cache_path = self._get_cache_path(url, method)
+        cache_path = self._get_cache_path(url, method, body)
 
         if not cache_path.exists():
             return None
@@ -168,16 +181,19 @@ class CacheManager:
 
         return None
 
-    def has_cache(self, url: str, method: str = "GET") -> bool:
+    def has_cache(
+            self, url: str, method: str = "GET", body: Optional[bytes] = None
+    ) -> bool:
         """
         检查缓存是否存在
 
         Args:
             url: 请求的完整 URL
             method: HTTP 方法
+            body: 请求体 (POST 请求需要)
 
         Returns:
             缓存是否存在
         """
-        cache_path = self._get_cache_path(url, method)
+        cache_path = self._get_cache_path(url, method, body)
         return cache_path.exists()

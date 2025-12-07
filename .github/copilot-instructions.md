@@ -42,16 +42,18 @@ custom/
 http://example.com/about → ./cache/example.com/get/about/index.html
 http://example.com/api.css → ./cache/example.com/get/api.css
 
-# POST 请求: ./cache/{domain}/post/{path}.json
-http://example.com/api/data → ./cache/example.com/post/api/data.json
+# POST 请求: ./cache/{domain}/post/{path}/{md5(body)}
+# 使用请求体的 MD5 哈希值作为文件名，支持相同 URL 不同 body 的缓存
+POST http://example.com/api/data {"user":"alice"} → ./cache/example.com/post/api/data/5d41402abc4b2a76b9719d911017c592
+POST http://example.com/api/data {"user":"bob"}   → ./cache/example.com/post/api/data/9f9d51bc70ef21ca5c14f307980a29d8
 
 # 元数据：{file}.meta （仅 GET）
-./cache/example.com/get/about/index.html.meta
+./cache/example.com/get/about/index.html.meta  # stores headers + status_code
 ```
 
-**注意**：只缓存 GET 和 POST 请求，其他 HTTP 方法不记录。
+**注意**：只缓存 GET 和 POST 请求，其他 HTTP 方法不记录。POST 缓存文件无扩展名，内容为 JSON 格式。
 
-See `CacheManager._get_cache_path()` for exact logic - it handles trailing slashes, missing extensions, and domain extraction.
+See `CacheManager._get_cache_path()` for exact logic - it handles trailing slashes, missing extensions, domain extraction, and MD5 hashing for POST bodies.
 
 ## Development Workflows
 
@@ -93,11 +95,20 @@ Routes are registered via `app.include_router(custom_router)` in `main.py` befor
 
 2. **POST cache format**:
 
-   - JSON with `{status_code, headers, content}` structure
-   - Payload ignored in local mode (URL-only lookup)
-   - See `CacheManager.save_response()` POST branch
+   - JSON with `{status_code, headers, content, request_body}` structure
+   - Files stored without extension at `{path}/{md5(body)}`
+   - Different request bodies to same URL create separate cache files
+   - Local mode requires matching body to retrieve correct cached response
+   - See `CacheManager.save_response()` POST branch and MD5 hashing logic
 
-3. **Redirect handling**:
+3. **Encoding detection and conversion**:
+
+   - Uses `chardet` to detect content encoding (supports non-UTF-8 sites)
+   - All cached content automatically converted to UTF-8
+   - `_detect_and_decode()` method handles: UTF-8 → chardet detection → fallback with errors='replace'
+   - Applies to both response content and request body in POST requests
+
+4. **Redirect handling**:
    - `ProxyHandler` rewrites `Location` headers pointing to target domain
    - Preserves external redirects and relative paths
    - See lines 81-97 in `proxy_handler.py`

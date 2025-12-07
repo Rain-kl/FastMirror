@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "beautifulsoup4>=4.14.2",
+    "chardet>=5.2.0",
     "fastapi[standard]>=0.121.1",
     "httpx>=0.28.1",
     "pydantic>=2.0.0",

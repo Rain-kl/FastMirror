@@ -46,8 +46,11 @@ class LocalHandler:
         method = request.method
         logger.info(f"Local mode: {method} request for: {full_url}")
 
+        # 读取请求体（POST 请求需要）
+        body = await request.body() if method.upper() == "POST" else None
+
         # 从缓存读取响应
-        cached_response = self.cache_manager.get_response(full_url, method)
+        cached_response = self.cache_manager.get_response(full_url, method, body)
 
         if cached_response is None:
             logger.warning(f"Cache not found for: {full_url}")
