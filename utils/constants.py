@@ -32,6 +32,7 @@ MIME_TYPE_JSON: Final[str] = "application/json"
 
 # HTTP 状态码
 HTTP_STATUS_OK: Final[int] = 200
+HTTP_STATUS_NOT_MODIFIED: Final[int] = 304
 HTTP_STATUS_NOT_FOUND: Final[int] = 404
 HTTP_STATUS_INTERNAL_ERROR: Final[int] = 500
 HTTP_STATUS_GATEWAY_TIMEOUT: Final[int] = 504

@@ -71,11 +71,27 @@ class ProxyHandler(BaseHandler):
             logger.debug(f"Response content-type: {response_headers.get('content-type', '')}")
             logger.debug(f"Response content length: {len(content)}")
 
+            # 处理 304 Not Modified: 移除条件请求头重新获取完整内容
+            if status_code == constants.HTTP_STATUS_NOT_MODIFIED:
+                logger.info(f"Received 304 Not Modified, fetching full content")
+                # 移除导致 304 的条件请求头
+                headers.pop('if-modified-since', None)
+                headers.pop('if-none-match', None)
+                
+                # 重新请求获取完整内容
+                response = await self.client.request(
+                    method=method, url=target_full_url, headers=headers, content=body
+                )
+                response_headers = dict(response.headers)
+                status_code = response.status_code
+                content = response.content
+                logger.info(f"Refetched with status: {status_code}, content length: {len(content)}")
+
             # 处理重定向 Location header
             if "location" in response_headers:
                 original_location = response_headers["location"]
                 new_location, modified = HttpUtil.rewrite_location_header(
-                    original_location, self.target_url
+                    original_location, self.target_url  
                 )
                 if modified:
                     response_headers["location"] = new_location
