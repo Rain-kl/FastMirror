@@ -29,7 +29,6 @@ class Config(BaseSettings):
 
     # 缓存目录配置
     cache_dir: str = "./cache"
-    cache_post_dir: str = "./cache_post"
 
     # 定制化接口目录
     custom_routes_dir: str = "./custom_routes"

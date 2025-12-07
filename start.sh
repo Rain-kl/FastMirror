@@ -21,6 +21,7 @@ case $choice in
         echo "启动反代模式..."
         echo "目标: $target_url"
         echo "端口: $port"
+        echo "缓存: ./cache/{domain}/get 和 ./cache/{domain}/post"
         echo ""
         
         uv run main.py --mode proxy --target "$target_url" --port "$port"

@@ -32,9 +32,7 @@ async def lifespan(app: FastAPI):
     global cache_manager, proxy_handler, local_handler
 
     # 初始化缓存管理器
-    cache_manager = CacheManager(
-        cache_dir=app_config.cache_dir, cache_post_dir=app_config.cache_post_dir
-    )
+    cache_manager = CacheManager(cache_dir=app_config.cache_dir)
 
     # 根据模式初始化对应的处理器
     if app_config.mode == RunMode.PROXY:
@@ -117,12 +115,7 @@ def main():
     parser.add_argument(
         "--cache-dir",
         type=str,
-        help="GET 请求缓存目录 [默认: 从 .env 读取或 ./cache]",
-    )
-    parser.add_argument(
-        "--cache-post-dir",
-        type=str,
-        help="POST 请求缓存目录 [默认: 从 .env 读取或 ./cache_post]",
+        help="缓存目录 [默认: 从 .env 读取或 ./cache]",
     )
     parser.add_argument(
         "--log-level",
@@ -150,8 +143,6 @@ def main():
         app_config.port = args.port
     if args.cache_dir:
         app_config.cache_dir = args.cache_dir
-    if args.cache_post_dir:
-        app_config.cache_post_dir = args.cache_post_dir
     if args.log_level:
         app_config.log_level = args.log_level
 
@@ -165,8 +156,7 @@ def main():
     logger.info(f"  监听地址: {app_config.host}:{app_config.port}")
     if app_config.target_url:
         logger.info(f"  目标服务器: {app_config.target_url}")
-    logger.info(f"  GET 缓存目录: {app_config.cache_dir}")
-    logger.info(f"  POST 缓存目录: {app_config.cache_post_dir}")
+    logger.info(f"  缓存目录: {app_config.cache_dir}")
     logger.info(f"  日志级别: {app_config.log_level}")
     logger.info("=" * 60)
 

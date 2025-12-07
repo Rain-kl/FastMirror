@@ -15,13 +15,7 @@
 - POST 请求: 缓存到 `./cache_post/` 目录,以 JSON 格式存储
 - 自动保存响应头和状态码
 
-### 3. HTML 内容处理
-
-- 自动将 HTML 中的绝对路径转换为相对路径
-- 支持处理各种资源引用(CSS、JS、图片、视频等)
-- 确保静态资源在本地模式下能正确加载
-
-### 4. 灵活配置
+### 3. 灵活配置
 
 - 支持命令行参数配置
 - 可自定义缓存目录、监听端口等
@@ -78,6 +72,7 @@ python main.py --mode local --port 8080 --cache-dir ./my_cache
 ```
 
 **参数说明:**
+
 - `--mode local`: 指定本地模式
 - `--target`: 原始目标服务器 URL (可选,用于构建缓存查找路径)
 - 其他参数同反代模式
@@ -87,6 +82,7 @@ python main.py --mode local --port 8080 --cache-dir ./my_cache
 ### 典型使用场景
 
 1. **第一阶段: 缓存收集**
+
    ```bash
    # 启动反代模式
    python main.py --mode proxy --target http://example.com --port 8000
@@ -96,6 +92,7 @@ python main.py --mode local --port 8080 --cache-dir ./my_cache
    ```
 
 2. **第二阶段: 离线使用**
+
    ```bash
    # 启动本地模式
    python main.py --mode local --target http://example.com --port 8000
@@ -136,7 +133,6 @@ python main.py --mode local --port 8080 --cache-dir ./my_cache
 
 - `config.py`: 配置管理
 - `cache_manager.py`: 缓存读写管理
-- `html_processor.py`: HTML 内容处理(路径转换)
 - `proxy_handler.py`: 反代模式请求处理
 - `local_handler.py`: 本地模式请求处理
 - `main.py`: 主入口和路由管理
@@ -162,7 +158,7 @@ python main.py --mode local --port 8080 --cache-dir ./my_cache
 
 ## 高级功能 (TODO)
 
-- [ ] 定制化接口支持 (本地模式优先使用自定义接口)
+- [x] 定制化接口支持 (本地模式优先使用自定义接口)
 - [ ] 缓存过期管理
 - [ ] 缓存统计和管理界面
 - [ ] 支持 HTTPS 代理
@@ -171,7 +167,3 @@ python main.py --mode local --port 8080 --cache-dir ./my_cache
 ## 许可证
 
 MIT License
-
-## 贡献
-
-欢迎提交 Issue 和 Pull Request!

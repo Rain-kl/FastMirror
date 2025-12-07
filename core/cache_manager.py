@@ -12,15 +12,11 @@ from urllib.parse import urlparse, unquote
 class CacheManager:
     """缓存管理器"""
 
-    def __init__(
-        self, cache_dir: str = "./cache", cache_post_dir: str = "./cache_post"
-    ):
+    def __init__(self, cache_dir: str = "./cache"):
         self.cache_dir = Path(cache_dir)
-        self.cache_post_dir = Path(cache_post_dir)
 
         # 确保缓存目录存在
         self.cache_dir.mkdir(parents=True, exist_ok=True)
-        self.cache_post_dir.mkdir(parents=True, exist_ok=True)
 
     def _get_cache_path(self, url: str, method: str = "GET") -> Path:
         """
@@ -38,8 +34,8 @@ class CacheManager:
         path = unquote(parsed.path).strip("/")
 
         if method.upper() == "GET":
-            # GET 请求: ./cache/example.com/path/to/resource/index.html
-            base_dir = self.cache_dir / domain
+            # GET 请求: ./cache/{domain}/get/path/to/resource/index.html
+            base_dir = self.cache_dir / domain / "get"
 
             if not path:
                 # 根路径
@@ -59,8 +55,8 @@ class CacheManager:
             return cache_path
 
         elif method.upper() == "POST":
-            # POST 请求: ./cache_post/example.com/path/to/endpoint.json
-            base_dir = self.cache_post_dir / domain
+            # POST 请求: ./cache/{domain}/post/path/to/endpoint.json
+            base_dir = self.cache_dir / domain / "post"
 
             if not path:
                 cache_path = base_dir / "index.json"
