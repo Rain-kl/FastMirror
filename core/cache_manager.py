@@ -38,25 +38,38 @@ class CacheManager:
         parsed = urlparse(url)
         domain = parsed.netloc
         path = unquote(parsed.path).strip("/")
+        query = parsed.query
 
         if method.upper() == "GET":
-            # GET 请求: ./cache/{domain}/get/path/to/resource/index.html
             base_dir = self.cache_dir / domain / "get"
 
-            if not path:
-                # 根路径
-                cache_path = base_dir / "index.html"
-            elif path.endswith("/"):
-                # 目录路径
-                cache_path = base_dir / path / "index.html"
-            else:
-                # 文件路径
-                # 检查是否有扩展名
-                if "." in Path(path).name:
-                    cache_path = base_dir / path
+            # 如果有查询参数，使用 MD5 哈希值作为文件名
+            if query:
+                # GET 请求带参数: ./cache/{domain}/get/path/to/resource/params/{md5(query)}
+                query_hash = hashlib.md5(query.encode("utf-8")).hexdigest()
+                
+                if not path:
+                    # 根路径带参数: ./cache/{domain}/get/params/{md5}
+                    cache_path = base_dir / "params" / f"{query_hash}.json"
                 else:
-                    # 没有扩展名,作为目录处理
+                    # 带路径和参数: ./cache/{domain}/get/path/params/{md5}
+                    cache_path = base_dir / path / "params" / f"{query_hash}.json"
+            else:
+                # GET 请求无参数: ./cache/{domain}/get/path/to/resource/index.html
+                if not path:
+                    # 根路径
+                    cache_path = base_dir / "index.html"
+                elif path.endswith("/"):
+                    # 目录路径
                     cache_path = base_dir / path / "index.html"
+                else:
+                    # 文件路径
+                    # 检查是否有扩展名
+                    if "." in Path(path).name:
+                        cache_path = base_dir / path
+                    else:
+                        # 没有扩展名,作为目录处理
+                        cache_path = base_dir / path / "index.html"
 
             return cache_path
 
@@ -112,13 +125,26 @@ class CacheManager:
             cleaned_headers.pop(header, None)
 
         if method.upper() == "GET":
-            # GET 请求直接保存内容
-            cache_path.write_bytes(content)
+            parsed = urlparse(url)
+            query = parsed.query
+            
+            # 如果有查询参数，使用 JSON 格式保存（类似 POST）
+            if query:
+                data = {
+                    "status_code": status_code,
+                    "headers": cleaned_headers,
+                    "content": EncodingUtil.detect_and_decode(content),
+                    "query_params": query,
+                }
+                cache_path.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+            else:
+                # GET 请求无参数直接保存内容
+                cache_path.write_bytes(content)
 
-            # 保存元数据 (headers 和 status_code)
-            meta_path = cache_path.with_suffix(cache_path.suffix + ".meta")
-            meta_data = {"status_code": status_code, "headers": cleaned_headers}
-            meta_path.write_text(json.dumps(meta_data, indent=2, ensure_ascii=False))
+                # 保存元数据 (headers 和 status_code)
+                meta_path = cache_path.with_suffix(cache_path.suffix + ".meta")
+                meta_data = {"status_code": status_code, "headers": cleaned_headers}
+                meta_path.write_text(json.dumps(meta_data, indent=2, ensure_ascii=False))
 
         elif method.upper() == "POST":
             # POST 请求保存为 JSON (无扩展名)
@@ -155,20 +181,32 @@ class CacheManager:
             return None
 
         if method.upper() == "GET":
-            # 读取内容
-            content = cache_path.read_bytes()
-
-            # 读取元数据
-            meta_path = cache_path.with_suffix(cache_path.suffix + ".meta")
-            if meta_path.exists():
-                meta_data = json.loads(meta_path.read_text())
-                headers = meta_data.get("headers", {})
-                status_code = meta_data.get("status_code", 200)
+            parsed = urlparse(url)
+            query = parsed.query
+            
+            # 如果有查询参数，从 JSON 格式读取
+            if query:
+                data = json.loads(cache_path.read_text())
+                return {
+                    "content": data.get("content", "").encode("utf-8"),
+                    "headers": data.get("headers", {}),
+                    "status_code": data.get("status_code", 200),
+                }
             else:
-                headers = {}
-                status_code = 200
+                # GET 请求无参数直接读取内容
+                content = cache_path.read_bytes()
 
-            return {"content": content, "headers": headers, "status_code": status_code}
+                # 读取元数据
+                meta_path = cache_path.with_suffix(cache_path.suffix + ".meta")
+                if meta_path.exists():
+                    meta_data = json.loads(meta_path.read_text())
+                    headers = meta_data.get("headers", {})
+                    status_code = meta_data.get("status_code", 200)
+                else:
+                    headers = {}
+                    status_code = 200
+
+                return {"content": content, "headers": headers, "status_code": status_code}
 
         elif method.upper() == "POST":
             # POST 请求从 JSON 读取

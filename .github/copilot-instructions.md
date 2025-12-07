@@ -45,22 +45,30 @@ custom/
 **Cache paths mirror URL structure** - understanding this is essential:
 
 ```python
-# GET 请求: ./cache/{domain}/get/{path}
+# GET 请求（无参数）: ./cache/{domain}/get/{path}
 http://example.com/about → ./cache/example.com/get/about/index.html
 http://example.com/api.css → ./cache/example.com/get/api.css
+
+# GET 请求（带参数）: ./cache/{domain}/get/{path}/params/{md5(query)}
+# 使用查询参数的 MD5 哈希值作为文件名，支持同一路径不同参数的缓存
+http://example.com/api?user=alice → ./cache/example.com/get/api/params/5d41402abc4b2a76b9719d911017c592
+http://example.com/api?user=bob   → ./cache/example.com/get/api/params/9f9d51bc70ef21ca5c14f307980a29d8
 
 # POST 请求: ./cache/{domain}/post/{path}/{md5(body)}
 # 使用请求体的 MD5 哈希值作为文件名，支持相同 URL 不同 body 的缓存
 POST http://example.com/api/data {"user":"alice"} → ./cache/example.com/post/api/data/5d41402abc4b2a76b9719d911017c592
 POST http://example.com/api/data {"user":"bob"}   → ./cache/example.com/post/api/data/9f9d51bc70ef21ca5c14f307980a29d8
 
-# 元数据：{file}.meta （仅 GET）
+# 元数据：{file}.meta （仅 GET 无参数）
 ./cache/example.com/get/about/index.html.meta  # stores headers + status_code
 ```
 
-**注意**：只缓存 GET 和 POST 请求，其他 HTTP 方法不记录。POST 缓存文件无扩展名，内容为 JSON 格式。
+**注意**：
+- 只缓存 GET 和 POST 请求，其他 HTTP 方法不记录
+- GET 带参数和 POST 缓存文件无扩展名，内容为 JSON 格式
+- GET 无参数保持原格式（HTML/CSS/JS/图片等），元数据单独存储
 
-See `CacheManager._get_cache_path()` for exact logic - it handles trailing slashes, missing extensions, domain extraction, and MD5 hashing for POST bodies.
+See `CacheManager._get_cache_path()` for exact logic - it handles trailing slashes, missing extensions, domain extraction, and MD5 hashing for query params and POST bodies.
 
 ## Development Workflows
 
@@ -103,13 +111,14 @@ Routes are registered via `app.include_router(custom_router)` in `main.py` befor
    - In `CacheManager.save_response()`: Also strip `content-length`, `transfer-encoding`
    - Why: Prevents double-decompression errors and chunking issues
 
-2. **POST cache format**:
+2. **Parametrized request cache format**:
 
-   - JSON with `{status_code, headers, content, request_body}` structure
-   - Files stored without extension at `{path}/{md5(body)}`
-   - Different request bodies to same URL create separate cache files
-   - Local mode requires matching body to retrieve correct cached response
-   - See `CacheManager.save_response()` POST branch and MD5 hashing logic
+   - **GET with query params**: JSON with `{status_code, headers, content, query_params}` structure
+   - **POST requests**: JSON with `{status_code, headers, content, request_body}` structure
+   - Files stored without extension at `{path}/params/{md5(query)}` or `{path}/{md5(body)}`
+   - Different parameters/bodies to same URL create separate cache files
+   - Hybrid/Local mode requires matching params/body to retrieve correct cached response
+   - See `CacheManager.save_response()` and `_get_cache_path()` for MD5 hashing logic
 
 3. **Encoding detection and conversion**:
 
