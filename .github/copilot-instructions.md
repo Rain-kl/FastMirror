@@ -64,6 +64,7 @@ POST http://example.com/api/data {"user":"bob"}   → ./cache/example.com/post/a
 ```
 
 **注意**：
+
 - 只缓存 GET 和 POST 请求，其他 HTTP 方法不记录
 - GET 带参数和 POST 缓存文件无扩展名，内容为 JSON 格式
 - GET 无参数保持原格式（HTML/CSS/JS/图片等），元数据单独存储

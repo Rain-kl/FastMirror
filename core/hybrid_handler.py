@@ -7,14 +7,16 @@ import logging
 
 from fastapi import Request, Response
 
+from utils import constants
 from .cache_manager import CacheManager
 from .local_handler import LocalHandler
 from .proxy_handler import ProxyHandler
+from .base_handler import BaseHandler
 
 logger = logging.getLogger(__name__)
 
 
-class HybridHandler:
+class HybridHandler(BaseHandler):
     """半代理模式请求处理器"""
 
     def __init__(self, target_url: str, cache_manager: CacheManager):
@@ -45,15 +47,18 @@ class HybridHandler:
             FastAPI 响应对象
         """
         # 构建完整 URL
-        full_url = f"{self.target_url}/{path.lstrip('/')}"
-        if request.url.query:
-            full_url += f"?{request.url.query}"
-
+        full_url = self.build_full_url(
+            self.target_url, path, str(request.url.query) if request.url.query else None
+        )
         method = request.method
-        logger.info(f"Hybrid mode: {method} request for: {full_url}")
+        self.log_request(method, full_url, "Hybrid mode")
 
         # 读取请求体（POST 请求需要用于缓存查找）
-        body = await request.body() if method.upper() == "POST" else None
+        body = (
+            await self.read_request_body(request)
+            if method.upper() == constants.HTTP_METHOD_POST
+            else None
+        )
 
         # 检查缓存是否存在
         if self.cache_manager.has_cache(full_url, method, body):
@@ -62,24 +67,16 @@ class HybridHandler:
             cached_response = self.cache_manager.get_response(full_url, method, body)
             
             if cached_response:
-                content = cached_response["content"]
-                headers = cached_response["headers"]
-                status_code = cached_response["status_code"]
-                
-                # 如果没有 Content-Type，尝试根据路径猜测
-                if "content-type" not in headers:
-                    import mimetypes
-                    guessed_type, _ = mimetypes.guess_type(path)
-                    if guessed_type:
-                        headers["content-type"] = guessed_type
-                
                 logger.info(f"Returning cached response for: {full_url}")
-                return Response(content=content, status_code=status_code, headers=headers)
+                return self.build_response(
+                    content=cached_response["content"],
+                    status_code=cached_response["status_code"],
+                    headers=cached_response["headers"],
+                    path=path,
+                )
 
         # 缓存不存在，使用代理模式
         logger.info(f"Cache miss, proxying request to: {full_url}")
-        # 注意：需要重新创建 Request 对象，因为 body 已经被读取
-        # 但 ProxyHandler 会再次读取，所以这里需要特殊处理
         return await self.proxy_handler.handle_request(request, path)
 
     async def close(self):

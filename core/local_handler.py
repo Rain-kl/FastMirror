@@ -3,17 +3,18 @@
 """
 
 import logging
-import mimetypes
 from typing import Optional
 
 from fastapi import Request, Response
 
+from utils import constants
 from .cache_manager import CacheManager
+from .base_handler import BaseHandler
 
 logger = logging.getLogger(__name__)
 
 
-class LocalHandler:
+class LocalHandler(BaseHandler):
     """本地模式请求处理器"""
 
     def __init__(self, cache_manager: CacheManager, target_url: Optional[str] = None):
@@ -39,34 +40,34 @@ class LocalHandler:
             FastAPI 响应对象
         """
         # 构建完整 URL (用于查找缓存)
-        full_url = f"{self.target_url}/{path.lstrip('/')}"
-        if request.url.query:
-            full_url += f"?{request.url.query}"
-
+        full_url = self.build_full_url(
+            self.target_url, path, str(request.url.query) if request.url.query else None
+        )
         method = request.method
-        logger.info(f"Local mode: {method} request for: {full_url}")
+        self.log_request(method, full_url, "Local mode")
 
         # 读取请求体（POST 请求需要）
-        body = await request.body() if method.upper() == "POST" else None
+        body = (
+            await self.read_request_body(request)
+            if method.upper() == constants.HTTP_METHOD_POST
+            else None
+        )
 
         # 从缓存读取响应
         cached_response = self.cache_manager.get_response(full_url, method, body)
 
         if cached_response is None:
             logger.warning(f"Cache not found for: {full_url}")
-            return Response(content=f"Cache not found for: {path}", status_code=404)
+            return Response(
+                content=f"Cache not found for: {path}",
+                status_code=constants.HTTP_STATUS_NOT_FOUND,
+            )
 
         # 返回缓存的响应
-        content = cached_response["content"]
-        headers = cached_response["headers"]
-        status_code = cached_response["status_code"]
-
-        # 如果没有 Content-Type,尝试根据路径猜测
-        if "content-type" not in headers:
-            guessed_type, _ = mimetypes.guess_type(path)
-            if guessed_type:
-                headers["content-type"] = guessed_type
-
         logger.info(f"Returning cached response for: {full_url}")
-
-        return Response(content=content, status_code=status_code, headers=headers)
+        return self.build_response(
+            content=cached_response["content"],
+            status_code=cached_response["status_code"],
+            headers=cached_response["headers"],
+            path=path,
+        )

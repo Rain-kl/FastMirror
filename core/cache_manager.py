@@ -3,13 +3,11 @@
 负责处理请求缓存的读写操作
 """
 
-import hashlib
 import json
 from pathlib import Path
 from typing import Optional, Dict, Any
-from urllib.parse import urlparse, unquote
 
-from utils import EncodingUtil
+from utils import EncodingUtil, CachePathUtil, HttpUtil, constants
 
 
 class CacheManager:
@@ -35,60 +33,16 @@ class CacheManager:
         Returns:
             缓存文件的路径
         """
-        parsed = urlparse(url)
-        domain = parsed.netloc
-        path = unquote(parsed.path).strip("/")
-        query = parsed.query
+        domain, path, query = CachePathUtil.extract_url_parts(url)
 
-        if method.upper() == "GET":
-            base_dir = self.cache_dir / domain / "get"
-
-            # 如果有查询参数，使用 MD5 哈希值作为文件名
-            if query:
-                # GET 请求带参数: ./cache/{domain}/get/path/to/resource/params/{md5(query)}
-                query_hash = hashlib.md5(query.encode("utf-8")).hexdigest()
-                
-                if not path:
-                    # 根路径带参数: ./cache/{domain}/get/params/{md5}
-                    cache_path = base_dir / "params" / f"{query_hash}.json"
-                else:
-                    # 带路径和参数: ./cache/{domain}/get/path/params/{md5}
-                    cache_path = base_dir / path / "params" / f"{query_hash}.json"
-            else:
-                # GET 请求无参数: ./cache/{domain}/get/path/to/resource/index.html
-                if not path:
-                    # 根路径
-                    cache_path = base_dir / "index.html"
-                elif path.endswith("/"):
-                    # 目录路径
-                    cache_path = base_dir / path / "index.html"
-                else:
-                    # 文件路径
-                    # 检查是否有扩展名
-                    if "." in Path(path).name:
-                        cache_path = base_dir / path
-                    else:
-                        # 没有扩展名,作为目录处理
-                        cache_path = base_dir / path / "index.html"
-
-            return cache_path
-
-        elif method.upper() == "POST":
-            # POST 请求: ./cache/{domain}/post/path/to/endpoint/{md5(body)}
-            base_dir = self.cache_dir / domain / "post"
-
-            # 计算请求体的 MD5 哈希值
-            body_hash = hashlib.md5(body or b"").hexdigest()
-
-            if not path:
-                # 根路径: ./cache/{domain}/post/root/{md5}
-                cache_path = base_dir / "root" / f"{body_hash}.json"
-            else:
-                # 带路径: ./cache/{domain}/post/path/to/endpoint/{md5}
-                cache_path = base_dir / path / f"{body_hash}.json"
-
-            return cache_path
-
+        if method.upper() == constants.HTTP_METHOD_GET:
+            return CachePathUtil.build_get_cache_path(
+                self.cache_dir, domain, path, query
+            )
+        elif method.upper() == constants.HTTP_METHOD_POST:
+            return CachePathUtil.build_post_cache_path(
+                self.cache_dir, domain, path, body
+            )
         else:
             raise ValueError(f"Unsupported HTTP method: {method}")
 
@@ -117,16 +71,11 @@ class CacheManager:
         # 确保父目录存在
         cache_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # 清理headers,移除可能导致问题的header
-        # httpx已自动解压,移除content-encoding避免浏览器二次解压
-        cleaned_headers = dict(headers or {})
-        headers_to_remove = ["content-encoding", "content-length", "transfer-encoding"]
-        for header in headers_to_remove:
-            cleaned_headers.pop(header, None)
+        # 清理 headers，使用工具类
+        cleaned_headers = HttpUtil.clean_response_headers(headers or {})
 
-        if method.upper() == "GET":
-            parsed = urlparse(url)
-            query = parsed.query
+        if method.upper() == constants.HTTP_METHOD_GET:
+            _, _, query = CachePathUtil.extract_url_parts(url)
             
             # 如果有查询参数，使用 JSON 格式保存（类似 POST）
             if query:
@@ -136,17 +85,25 @@ class CacheManager:
                     "content": EncodingUtil.detect_and_decode(content),
                     "query_params": query,
                 }
-                cache_path.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+                cache_path.write_text(
+                    json.dumps(data, indent=2, ensure_ascii=False),
+                    encoding=constants.ENCODING_UTF8,
+                )
             else:
                 # GET 请求无参数直接保存内容
                 cache_path.write_bytes(content)
 
                 # 保存元数据 (headers 和 status_code)
-                meta_path = cache_path.with_suffix(cache_path.suffix + ".meta")
+                meta_path = cache_path.with_suffix(
+                    cache_path.suffix + constants.CACHE_FILE_EXTENSION_META
+                )
                 meta_data = {"status_code": status_code, "headers": cleaned_headers}
-                meta_path.write_text(json.dumps(meta_data, indent=2, ensure_ascii=False))
+                meta_path.write_text(
+                    json.dumps(meta_data, indent=2, ensure_ascii=False),
+                    encoding=constants.ENCODING_UTF8,
+                )
 
-        elif method.upper() == "POST":
+        elif method.upper() == constants.HTTP_METHOD_POST:
             # POST 请求保存为 JSON (无扩展名)
             data = {
                 "status_code": status_code,
@@ -154,7 +111,10 @@ class CacheManager:
                 "content": EncodingUtil.detect_and_decode(content),
                 "request_body": EncodingUtil.detect_and_decode(body) if body else "",
             }
-            cache_path.write_text(json.dumps(data, indent=2, ensure_ascii=False))
+            cache_path.write_text(
+                json.dumps(data, indent=2, ensure_ascii=False),
+                encoding=constants.ENCODING_UTF8,
+            )
 
     def get_response(
             self, url: str, method: str = "GET", body: Optional[bytes] = None
@@ -180,41 +140,46 @@ class CacheManager:
         if not cache_path.exists():
             return None
 
-        if method.upper() == "GET":
-            parsed = urlparse(url)
-            query = parsed.query
+        if method.upper() == constants.HTTP_METHOD_GET:
+            _, _, query = CachePathUtil.extract_url_parts(url)
             
             # 如果有查询参数，从 JSON 格式读取
             if query:
-                data = json.loads(cache_path.read_text())
+                data = json.loads(
+                    cache_path.read_text(encoding=constants.ENCODING_UTF8)
+                )
                 return {
-                    "content": data.get("content", "").encode("utf-8"),
+                    "content": data.get("content", "").encode(constants.ENCODING_UTF8),
                     "headers": data.get("headers", {}),
-                    "status_code": data.get("status_code", 200),
+                    "status_code": data.get("status_code", constants.HTTP_STATUS_OK),
                 }
             else:
                 # GET 请求无参数直接读取内容
                 content = cache_path.read_bytes()
 
                 # 读取元数据
-                meta_path = cache_path.with_suffix(cache_path.suffix + ".meta")
+                meta_path = cache_path.with_suffix(
+                    cache_path.suffix + constants.CACHE_FILE_EXTENSION_META
+                )
                 if meta_path.exists():
-                    meta_data = json.loads(meta_path.read_text())
+                    meta_data = json.loads(
+                        meta_path.read_text(encoding=constants.ENCODING_UTF8)
+                    )
                     headers = meta_data.get("headers", {})
-                    status_code = meta_data.get("status_code", 200)
+                    status_code = meta_data.get("status_code", constants.HTTP_STATUS_OK)
                 else:
                     headers = {}
-                    status_code = 200
+                    status_code = constants.HTTP_STATUS_OK
 
                 return {"content": content, "headers": headers, "status_code": status_code}
 
-        elif method.upper() == "POST":
+        elif method.upper() == constants.HTTP_METHOD_POST:
             # POST 请求从 JSON 读取
-            data = json.loads(cache_path.read_text())
+            data = json.loads(cache_path.read_text(encoding=constants.ENCODING_UTF8))
             return {
-                "content": data.get("content", "").encode("utf-8"),
+                "content": data.get("content", "").encode(constants.ENCODING_UTF8),
                 "headers": data.get("headers", {}),
-                "status_code": data.get("status_code", 200),
+                "status_code": data.get("status_code", constants.HTTP_STATUS_OK),
             }
 
         return None
